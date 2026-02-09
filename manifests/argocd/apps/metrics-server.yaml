@@ -1,0 +1,32 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: metrics-server
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://kubernetes-sigs.github.io/metrics-server/
+    chart: metrics-server
+    targetRevision: "*"
+    helm:
+      parameters:
+        - name: args[0]
+          value: "--kubelet-insecure-tls"
+        - name: resources.requests.cpu
+          value: "25m"
+        - name: resources.requests.memory
+          value: "64Mi"
+        - name: resources.limits.memory
+          value: "128Mi"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - Replace=true

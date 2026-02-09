@@ -1,0 +1,4 @@
+name: talos-cluster
+runtime:
+  name: nodejs
+description: Single-node Talos Linux Kubernetes cluster on AWS (Phase 0)

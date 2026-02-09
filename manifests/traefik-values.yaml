@@ -1,0 +1,44 @@
+# Traefik values for single-node Talos + Cloudflare Tunnel setup
+# No LoadBalancer needed — cloudflared connects directly to Traefik's ClusterIP
+
+service:
+  type: ClusterIP
+
+# Single replica for Phase 0
+deployment:
+  replicas: 1
+
+# Resource limits for t3a.small
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+
+# Enable dashboard (access via port-forward for debugging)
+ingressRoute:
+  dashboard:
+    enabled: true
+    matchRule: "PathPrefix(`/dashboard`) || PathPrefix(`/api`)"
+    entryPoints:
+      - traefik
+
+ports:
+  web:
+    port: 8000
+    exposedPort: 80
+  websecure:
+    port: 8443
+    exposedPort: 443
+  traefik:
+    port: 9000
+    expose:
+      default: false
+
+logs:
+  general:
+    level: INFO
+  access:
+    enabled: true
