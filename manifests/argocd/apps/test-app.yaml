@@ -8,7 +8,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: git@github.com:FaultyTechnology/talos-infra.git
+    repoURL: git@github.com:faulty-technology/talos-infra.git
     targetRevision: main
     path: manifests
     directory:
