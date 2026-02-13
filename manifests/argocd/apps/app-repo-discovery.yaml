@@ -16,8 +16,7 @@ spec:
           appSecretName: argocd-repo-github-app
         cloneProtocol: https
         filters:
-          - repositoryMatch: "^(?!talos-infra$)"
-            pathsExist:
+          - pathsExist:
               - .argocd
   template:
     metadata:
