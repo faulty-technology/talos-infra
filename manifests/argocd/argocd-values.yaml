@@ -44,6 +44,16 @@ redis:
     limits:
       memory: 128Mi
 
+# No cloud LoadBalancer — Ingress status.loadBalancer is never populated.
+# Override the health check so ArgoCD doesn't mark them as Progressing forever.
+configs:
+  cm:
+    resource.customizations.health.networking.k8s.io_Ingress: |
+      hs = {}
+      hs.status = "Healthy"
+      hs.message = ""
+      return hs
+
 # Disable components we don't need
 dex:
   enabled: false
