@@ -1,6 +1,8 @@
-# SCM Provider — auto-discovers app repos in the faulty-technology org.
-# Repos with a .argocd/ directory get a thin pointer Application that
-# delegates all deployment config to the app repo itself.
+# List-based app repo discovery. Each entry generates a thin pointer
+# Application that delegates all deployment config to the app repo's
+# .argocd/ directory.
+#
+# To onboard a new app repo, add an entry to the list below.
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -10,21 +12,17 @@ spec:
   goTemplate: true
   goTemplateOptions: ["missingkey=error"]
   generators:
-    - scmProvider:
-        github:
-          organization: faulty-technology
-          appSecretName: argocd-repo-github-app
-        cloneProtocol: https
-        filters:
-          - pathsExist:
-              - .argocd
+    - list:
+        elements:
+          - repo: hello-k8s
+            branch: main
   template:
     metadata:
-      name: "{{.repository}}"
+      name: "{{.repo}}"
     spec:
       project: default
       source:
-        repoURL: "{{.url}}"
+        repoURL: "https://github.com/faulty-technology/{{.repo}}.git"
         targetRevision: "{{.branch}}"
         path: .argocd
       destination:
