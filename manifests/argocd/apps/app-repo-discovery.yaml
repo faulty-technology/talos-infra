@@ -16,6 +16,8 @@ spec:
         elements:
           - repo: hello-k8s
             branch: main
+          - repo: subnet-cheat-sheet
+            branch: main
   template:
     metadata:
       name: "{{.repo}}"
