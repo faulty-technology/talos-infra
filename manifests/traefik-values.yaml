@@ -8,7 +8,7 @@ service:
 deployment:
   replicas: 1
 
-# Resource limits for t3a.small
+# Resource limits for t3a.medium
 resources:
   requests:
     cpu: 50m

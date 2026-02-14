@@ -3,7 +3,8 @@ config:
   talos-cluster:instanceType: t3a.medium
   talos-cluster:rootVolumeSize: "20"
   talos-cluster:clusterName: talos-homelab
-  talos-cluster:allowedCidrs: '["REDACTED/32"]'
+  talos-cluster:allowedCidrs:
+    secure: v1:BOsTAsofsAjoBrZ5:tUurPJ73EB4hcVNje1MWu4sve9+3SEpk+wmXUrIUPEpX6Ejh
   talos-cluster:cloudflareTunnelToken:
     secure: v1:DsHgTfHAzTDMGdQo:TlYlH+DCGhYinCmlMB6tZjnVw8QV4FDAA+n3UBenGfZ33i8XMvhqkcPestDgC7jrfiLl/X3/mDYDs6Z/erhC7UHarM6GwidrQdM+TahO75S22fNO2EdaAbRkyN1iIixkppQGVzXHMMOQ8DSXBtEcv0tB8SPw1t3k0iS8ITKeJfvrQxRzi5jz0bjys7O79fyahyVa25Ak4zqy6XKenoNm/z8Tep+Uc/V1Zx86QJ1YEZ3tFvM2qZoRTf88syod+Dz6C4fjYD2o3GXo419BUCh1Q8jg5Ql4eX6HQTzqaEIgaaBWFU8OCyFloTyZCYuvFErTB9Nc8ERR8V4YH82BEqO5rQ==
 encryptionsalt: v1:1GRL35Xuz4w=:v1:c6YwzkZhFek8ikqZ:En/VJYN064bGZSXXfp2UQe+CRbuFhQ==

@@ -1,7 +1,7 @@
 # Talos Cluster — Phase 0 (Single Node)
 
 Single Talos Linux node on AWS running both control plane and workloads.
-ArgoCD manages all Kubernetes apps via App of Apps pattern. ~$17-20/mo all-in.
+ArgoCD manages all Kubernetes apps via App of Apps pattern. ~$31-34/mo.
 
 ## Quick Start
 
@@ -46,7 +46,7 @@ kubectl get pods -A
 - Internet gateway + route table
 - Security group (ports 6443 + 50000 inbound, restricted to configured CIDR; all outbound)
 - IAM role with EBS CSI permissions
-- t3a.small EC2 instance running Talos Linux
+- t3a.medium EC2 instance running Talos Linux
 - Elastic IP (stable address across restarts)
 
 ### Kubernetes Components (via ArgoCD App of Apps)
@@ -167,12 +167,12 @@ pulumi destroy
 
 | Component                | Monthly     |
 | ------------------------ | ----------- |
-| t3a.small (on-demand)    | ~$14        |
+| t3a.medium (on-demand)   | ~$28        |
 | EBS gp3 root (20GB)      | ~$1.60      |
 | EBS gp3 PVCs (est. 20GB) | ~$1.60      |
 | Elastic IP (attached)    | $0          |
 | Cloudflare Tunnel        | $0          |
-| **Total**                | **~$17-20** |
+| **Total**                | **~$31-34** |
 
 Note: Elastic IPs are free when attached to a running instance.
 Stopped instances with attached EIPs cost ~$0.005/hr ($3.60/mo).

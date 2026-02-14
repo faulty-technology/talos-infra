@@ -6,7 +6,7 @@ import * as aws from "@pulumi/aws";
 // ---------------------------------------------------------------------------
 const config = new pulumi.Config();
 const clusterName = config.get("clusterName") || "talos-homelab";
-const instanceType = config.get("instanceType") || "t3a.small";
+const instanceType = config.get("instanceType") || "t3a.medium";
 const rootVolumeSize = config.getNumber("rootVolumeSize") || 20;
 const allowedCidrs = config.getObject<string[]>("allowedCidrs") || [
 	"0.0.0.0/0",
