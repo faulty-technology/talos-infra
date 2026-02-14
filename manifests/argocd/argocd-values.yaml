@@ -48,6 +48,8 @@ redis:
 # Override the health check so ArgoCD doesn't mark them as Progressing forever.
 configs:
   cm:
+    # How often ArgoCD polls Git repos for changes (default: 180s / 3min)
+    timeout.reconciliation: 120s
     resource.customizations.health.networking.k8s.io_Ingress: |
       hs = {}
       hs.status = "Healthy"
