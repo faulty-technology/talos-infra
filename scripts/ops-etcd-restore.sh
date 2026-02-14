@@ -98,7 +98,18 @@ info "Node is in maintenance mode"
 
 info "Step 2/4: Re-applying machine config..."
 [[ -f "${CONFIG_DIR}/controlplane.yaml" ]] || error "controlplane.yaml not found in ${CONFIG_DIR}"
-talosctl apply-config --insecure --nodes "$NODE_IP" --file "${CONFIG_DIR}/controlplane.yaml" || error "apply-config failed"
+
+PATCH_FILE="${CONFIG_DIR}/patch-single-node.yaml"
+if [[ -f "$PATCH_FILE" ]]; then
+	talosctl apply-config --insecure --nodes "$NODE_IP" \
+		--file "${CONFIG_DIR}/controlplane.yaml" \
+		--config-patch @"$PATCH_FILE" || error "apply-config failed"
+else
+	warn "Single-node patch not found at ${PATCH_FILE} — applying without it."
+	warn "Re-run bootstrap-cluster.sh after restore to regenerate the patch."
+	talosctl apply-config --insecure --nodes "$NODE_IP" \
+		--file "${CONFIG_DIR}/controlplane.yaml" || error "apply-config failed"
+fi
 
 info "Waiting for node to reboot with config..."
 sleep 15

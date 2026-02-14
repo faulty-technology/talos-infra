@@ -13,7 +13,7 @@ NC='\033[0m'
 
 info()  { echo -e "${GREEN}[✓]${NC} $1"; }
 warn()  { echo -e "${YELLOW}[!]${NC} $1"; }
-error() { echo -e "${RED}[✗]${NC} $1"; }
+error() { echo -e "${RED}[✗]${NC} $1"; exit 1; }
 
 OS="$(uname -s)"
 ARCH="$(uname -m)"

@@ -2,6 +2,7 @@ node_modules/
 dist/
 .talos/
 secrets/
+private/
 *.log
 .env*.local
 # Pulumi

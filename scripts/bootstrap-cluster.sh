@@ -395,7 +395,7 @@ echo ""
 echo "    export TALOSCONFIG=${CONFIG_DIR}/talosconfig"
 echo "    export KUBECONFIG=${CONFIG_DIR}/kubeconfig"
 echo ""
-echo "  Next step: ./scripts/bootstrap-install-essentials.sh"
+echo "  Next step: ./scripts/bootstrap-secrets.sh"
 echo ""
 
 # ---------------------------------------------------------------------------
