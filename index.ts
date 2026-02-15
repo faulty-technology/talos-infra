@@ -1,272 +1,37 @@
-import * as pulumi from "@pulumi/pulumi";
-import * as aws from "@pulumi/aws";
+import {
+	eip,
+	instance,
+	vpcId,
+	subnetId,
+	securityGroupId,
+	talosAmiId,
+	talosAmiName,
+	etcdBackupBucketName,
+} from "./src/aws";
+
+// Talos bootstrap (secrets → config → apply → bootstrap → kubeconfig)
+import "./src/talos";
+
+// Kubernetes secrets + ArgoCD
+import { argocdAdminPassword } from "./src/kubernetes";
+
+// Write talosconfig + kubeconfig to .talos/ for CLI access
+import "./src/files";
 
 // ---------------------------------------------------------------------------
-// Config
-// ---------------------------------------------------------------------------
-const config = new pulumi.Config();
-const clusterName = config.get("clusterName") || "talos-homelab";
-const instanceType = config.get("instanceType") || "t3a.medium";
-const rootVolumeSize = config.getNumber("rootVolumeSize") || 20;
-const allowedCidrs = config.getObject<string[]>("allowedCidrs") || [
-	"0.0.0.0/0",
-];
-
-const tags = { Project: clusterName, ManagedBy: "pulumi" };
-
-// ---------------------------------------------------------------------------
-// Talos AMI Lookup (official Sidero Labs images)
-// ---------------------------------------------------------------------------
-const talosAmi = aws.ec2.getAmiOutput({
-	mostRecent: true,
-	owners: ["540036508848"], // Sidero Labs
-	filters: [
-		{ name: "name", values: ["talos-v1.12*"] },
-		{ name: "architecture", values: ["x86_64"] },
-		{ name: "virtualization-type", values: ["hvm"] },
-	],
-});
-
-// ---------------------------------------------------------------------------
-// VPC + Networking (single AZ, public subnet)
-// ---------------------------------------------------------------------------
-const vpc = new aws.ec2.Vpc("vpc", {
-	cidrBlock: "10.0.0.0/16",
-	enableDnsSupport: true,
-	enableDnsHostnames: true,
-	tags: { ...tags, Name: `${clusterName}-vpc` },
-});
-
-const subnet = new aws.ec2.Subnet("subnet", {
-	vpcId: vpc.id,
-	cidrBlock: "10.0.1.0/24",
-	availabilityZone: "us-east-1a",
-	mapPublicIpOnLaunch: true,
-	tags: { ...tags, Name: `${clusterName}-public` },
-});
-
-const igw = new aws.ec2.InternetGateway("igw", {
-	vpcId: vpc.id,
-	tags: { ...tags, Name: `${clusterName}-igw` },
-});
-
-const routeTable = new aws.ec2.RouteTable("route-table", {
-	vpcId: vpc.id,
-	routes: [{ cidrBlock: "0.0.0.0/0", gatewayId: igw.id }],
-	tags: { ...tags, Name: `${clusterName}-rt` },
-});
-
-new aws.ec2.RouteTableAssociation("rt-assoc", {
-	subnetId: subnet.id,
-	routeTableId: routeTable.id,
-});
-
-// ---------------------------------------------------------------------------
-// Security Group
-// ---------------------------------------------------------------------------
-// Talos needs:
-//   - 50000/tcp: talosctl API (mTLS)
-//   - 6443/tcp:  Kubernetes API
-//   - All outbound: Cloudflare tunnel, container pulls, etc.
-// No inbound HTTP/S — Cloudflare tunnel connects outbound
-// ---------------------------------------------------------------------------
-const sg = new aws.ec2.SecurityGroup("sg", {
-	name: `${clusterName}-sg`,
-	vpcId: vpc.id,
-	description: "Talos single-node cluster",
-	ingress: [
-		{
-			description: "Talos API (talosctl)",
-			protocol: "tcp",
-			fromPort: 50000,
-			toPort: 50000,
-			cidrBlocks: allowedCidrs,
-		},
-		{
-			description: "Kubernetes API",
-			protocol: "tcp",
-			fromPort: 6443,
-			toPort: 6443,
-			cidrBlocks: allowedCidrs,
-		},
-	],
-	egress: [
-		{
-			description: "All outbound",
-			protocol: "-1",
-			fromPort: 0,
-			toPort: 0,
-			cidrBlocks: ["0.0.0.0/0"],
-		},
-	],
-	tags: { ...tags, Name: `${clusterName}-sg` },
-});
-
-// ---------------------------------------------------------------------------
-// IAM Role — EC2 instance profile with EBS CSI permissions
-// ---------------------------------------------------------------------------
-const instanceRole = new aws.iam.Role("instance-role", {
-	assumeRolePolicy: JSON.stringify({
-		Version: "2012-10-17",
-		Statement: [
-			{
-				Effect: "Allow",
-				Principal: { Service: "ec2.amazonaws.com" },
-				Action: "sts:AssumeRole",
-			},
-		],
-	}),
-	tags: { ...tags, Name: `${clusterName}-instance-role` },
-});
-
-// EBS CSI driver needs these permissions to manage volumes
-const ebsCsiPolicy = new aws.iam.RolePolicy("ebs-csi-policy", {
-	role: instanceRole.id,
-	policy: JSON.stringify({
-		Version: "2012-10-17",
-		Statement: [
-			{
-				Effect: "Allow",
-				Action: [
-					"ec2:CreateSnapshot",
-					"ec2:AttachVolume",
-					"ec2:DetachVolume",
-					"ec2:ModifyVolume",
-					"ec2:DescribeAvailabilityZones",
-					"ec2:DescribeInstances",
-					"ec2:DescribeSnapshots",
-					"ec2:DescribeTags",
-					"ec2:DescribeVolumes",
-					"ec2:DescribeVolumesModifications",
-					"ec2:CreateVolume",
-					"ec2:DeleteVolume",
-					"ec2:DeleteSnapshot",
-					"ec2:CreateTags",
-					"ec2:DeleteTags",
-				],
-				Resource: "*",
-			},
-		],
-	}),
-});
-
-// Note: SSM doesn't work with Talos (no agent). If you need remote access,
-// use talosctl (port 50000) or Tailscale/Cloudflare Tunnel.
-
-const instanceProfile = new aws.iam.InstanceProfile("instance-profile", {
-	role: instanceRole.name,
-	tags: { ...tags, Name: `${clusterName}-instance-profile` },
-});
-
-// ---------------------------------------------------------------------------
-// Elastic IP (stable address across stop/start cycles)
-// ---------------------------------------------------------------------------
-const eip = new aws.ec2.Eip("eip", {
-	domain: "vpc",
-	tags: { ...tags, Name: `${clusterName}-eip` },
-});
-
-// ---------------------------------------------------------------------------
-// EC2 Instance — Single Talos node (control plane + worker)
-// ---------------------------------------------------------------------------
-const instance = new aws.ec2.Instance("talos-node", {
-	ami: talosAmi.id,
-	instanceType: instanceType,
-	subnetId: subnet.id,
-	vpcSecurityGroupIds: [sg.id],
-	iamInstanceProfile: instanceProfile.name,
-	rootBlockDevice: {
-		volumeSize: rootVolumeSize,
-		volumeType: "gp3",
-		deleteOnTermination: true,
-		tags: { ...tags, Name: `${clusterName}-root` },
-	},
-	tags: { ...tags, Name: `${clusterName}-node` },
-	// Talos ignores user_data for config — we apply config via talosctl
-	// But we tag the instance so scripts can find it
-	metadataOptions: {
-		httpTokens: "required", // IMDSv2 only
-		httpEndpoint: "enabled",
-	},
-});
-
-// Associate the Elastic IP after instance creation
-new aws.ec2.EipAssociation("eip-assoc", {
-	instanceId: instance.id,
-	allocationId: eip.id,
-});
-
-// ---------------------------------------------------------------------------
-// S3 Bucket — etcd backup snapshots
-// ---------------------------------------------------------------------------
-const etcdBackupBucket = new aws.s3.BucketV2("etcd-backup-bucket", {
-	bucket: `${clusterName}-etcd-backups`,
-	tags: { ...tags, Name: `${clusterName}-etcd-backups` },
-});
-
-new aws.s3.BucketVersioningV2("etcd-backup-versioning", {
-	bucket: etcdBackupBucket.id,
-	versioningConfiguration: { status: "Enabled" },
-});
-
-new aws.s3.BucketLifecycleConfigurationV2("etcd-backup-lifecycle", {
-	bucket: etcdBackupBucket.id,
-	rules: [
-		{
-			id: "expire-old-backups",
-			status: "Enabled",
-			expiration: { days: 30 },
-			noncurrentVersionExpiration: { noncurrentDays: 7 },
-		},
-	],
-});
-
-new aws.s3.BucketServerSideEncryptionConfigurationV2("etcd-backup-sse", {
-	bucket: etcdBackupBucket.id,
-	rules: [
-		{
-			applyServerSideEncryptionByDefault: {
-				sseAlgorithm: "AES256",
-			},
-		},
-	],
-});
-
-new aws.s3.BucketPublicAccessBlock("etcd-backup-public-access", {
-	bucket: etcdBackupBucket.id,
-	blockPublicAcls: true,
-	blockPublicPolicy: true,
-	ignorePublicAcls: true,
-	restrictPublicBuckets: true,
-});
-
-// IAM policy: allow EC2 instance to read/write etcd backups
-new aws.iam.RolePolicy("etcd-backup-policy", {
-	role: instanceRole.id,
-	policy: pulumi.interpolate`{
-		"Version": "2012-10-17",
-		"Statement": [{
-			"Effect": "Allow",
-			"Action": ["s3:PutObject", "s3:GetObject", "s3:ListBucket"],
-			"Resource": [
-				"arn:aws:s3:::${etcdBackupBucket.bucket}",
-				"arn:aws:s3:::${etcdBackupBucket.bucket}/*"
-			]
-		}]
-	}`,
-});
-
-// ---------------------------------------------------------------------------
-// Outputs — consumed by bootstrap scripts
+// Stack Outputs
 // ---------------------------------------------------------------------------
 export const nodePublicIp = eip.publicIp;
 export const nodePrivateIp = instance.privateIp;
 export const nodeInstanceId = instance.id;
-export const vpcId = vpc.id;
-export const subnetId = subnet.id;
-export const securityGroupId = sg.id;
-export const talosAmiId = talosAmi.id;
-export const talosAmiName = talosAmi.name;
-export const etcdBackupBucketName = etcdBackupBucket.bucket;
+export {
+	vpcId,
+	subnetId,
+	securityGroupId,
+	talosAmiId,
+	talosAmiName,
+	etcdBackupBucketName,
+};
 export const region = "us-east-1";
 export const availabilityZone = "us-east-1a";
+export { argocdAdminPassword };

@@ -17,22 +17,21 @@ aws configure
 #   Region:            us-east-1
 #   Output:            json
 
-# 3. Deploy infrastructure
+# 3. Configure secrets (one-time)
 npm install
 source .env.local
 pulumi stack init dev
+pulumi config set --secret talos-cluster:allowedCidrs '["<your-ip>/32"]'
+pulumi config set --secret talos-cluster:cloudflareTunnelToken <token>
+pulumi config set --secret talos-cluster:githubAppId <id>
+pulumi config set --secret talos-cluster:githubAppInstallationId <id>
+# Multi-line PEM — pipe via stdin with trailing --
+cat <path/to/github-app.pem> | pulumi config set --secret talos-cluster:githubAppPrivateKey --
+
+# 4. Deploy everything (AWS + Talos + K8s secrets + ArgoCD)
 pulumi up
 
-# 4. Bootstrap the Talos cluster
-./scripts/bootstrap-cluster.sh
-
-# 5. Create K8s secrets (Cloudflare tunnel token, GitHub App credentials)
-./scripts/bootstrap-secrets.sh
-
-# 6. Install ArgoCD (syncs all other apps automatically)
-./scripts/bootstrap-install-argocd.sh
-
-# 7. Verify
+# 5. Verify
 export KUBECONFIG=.talos/kubeconfig
 kubectl get nodes
 kubectl get pods -A
@@ -63,14 +62,16 @@ kubectl get pods -A
 ## Directory Structure
 
 ```
-├── index.ts                 # Pulumi infrastructure code
+├── index.ts                 # Pulumi entry point
+├── src/
+│   ├── aws.ts               # AWS resources (VPC, SG, IAM, EIP, EC2, S3)
+│   ├── talos.ts             # Talos: secrets, config, apply, bootstrap, kubeconfig
+│   ├── kubernetes.ts        # K8s: secrets, ArgoCD Helm release, root app
+│   └── files.ts             # Write talosconfig + kubeconfig to .talos/
 ├── Pulumi.yaml              # Project definition
 ├── Pulumi.dev.yaml          # Stack config (region, instance type, etc.)
 ├── scripts/
 │   ├── bootstrap-prerequisites.sh   # Install tools
-│   ├── bootstrap-cluster.sh         # Generate Talos config, bootstrap etcd
-│   ├── bootstrap-secrets.sh         # Create K8s secrets (cloudflared, GitHub App)
-│   ├── bootstrap-install-argocd.sh  # Install ArgoCD + root app
 │   ├── ops-etcd-backup.sh           # etcd snapshot + S3 upload
 │   ├── ops-etcd-restore.sh          # etcd restore from snapshot
 │   └── utils.sh                     # Shared logging helpers
@@ -158,9 +159,9 @@ pulumi destroy
 
 ## Security Notes
 
-- `.talos/` and `secrets/` contain PKI keys — treat like SSH keys
-- Back up both to a secure location (1Password, age-encrypted file, etc.)
-- If `secrets/secrets.yaml` is lost, the cluster is **unrecoverable** (Talos has no SSH, no SSM, no console)
+- Talos PKI is stored in Pulumi state — back up your Pulumi state backend
+- If Pulumi state is lost, the cluster is **unrecoverable** (Talos has no SSH, no SSM, no console)
+- `.talos/` contains client credentials — treat like SSH keys
 - Security group restricts inbound to `allowedCidrs` in Pulumi config — set this to your IP
 
 ## Cost Breakdown

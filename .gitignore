@@ -1,6 +1,6 @@
 node_modules/
 dist/
-.talos/
+.talos**
 secrets/
 private/
 *.log

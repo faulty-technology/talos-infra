@@ -13,11 +13,28 @@ Install required tools:
 This installs: `talosctl`, `kubectl`, `helm`, AWS CLI (if missing).
 
 Ensure you have:
+
 - AWS credentials configured (`aws sts get-caller-identity` should work)
 - `.env.local` with `PULUMI_CONFIG_PASSPHRASE` set
 - Node.js + npm installed
 
-## 2. Deploy AWS Infrastructure
+## 2. Configure Pulumi Secrets
+
+Set the required secret config values (one-time per stack):
+
+```bash
+source .env.local
+
+# Required
+pulumi config set --secret talos-cluster:allowedCidrs '["<your-ip>/32"]'
+pulumi config set --secret talos-cluster:cloudflareTunnelToken <token>
+pulumi config set --secret talos-cluster:githubAppId <id>
+pulumi config set --secret talos-cluster:githubAppInstallationId <id>
+# Multi-line PEM — pipe via stdin with trailing --
+cat <path/to/github-app.pem> | pulumi config set --secret talos-cluster:githubAppPrivateKey --
+```
+
+## 3. Deploy Everything
 
 ```bash
 source .env.local
@@ -25,51 +42,20 @@ npm install
 npm run up
 ```
 
-This creates: VPC, subnet, security group, IAM role, EIP, and EC2 instance running Talos. Note the EIP from the Pulumi output — you'll need it for verification.
+A single `pulumi up` does everything:
 
-## 3. Bootstrap the Cluster
+1. Creates AWS infrastructure (VPC, subnet, SG, IAM, EIP, EC2, S3)
+2. Generates Talos PKI and machine configuration
+3. Applies config to the node and bootstraps etcd
+4. Retrieves kubeconfig from the running cluster
+5. Creates K8s secrets (cloudflared-token, argocd-repo-github-app)
+6. Installs ArgoCD via Helm
+7. Applies ArgoCD ingress route and root App of Apps
+8. Writes `.talos/talosconfig` and `.talos/kubeconfig` for CLI access
 
-```bash
-./scripts/bootstrap-cluster.sh
-```
+ArgoCD then syncs all workloads (EBS CSI, Metrics Server, Traefik, StorageClass, cloudflared, test-app).
 
-This script:
-1. Generates `secrets/secrets.yaml` (master PKI — **back this up immediately**)
-2. Derives machine config + talosconfig
-3. Waits for the node to reach maintenance mode
-4. Applies config and bootstraps etcd
-5. Waits for the Kubernetes API to become available
-6. Generates kubeconfig
-
-## 4. Create Kubernetes Secrets
-
-```bash
-./scripts/bootstrap-secrets.sh
-```
-
-Creates secrets that ArgoCD-managed apps depend on:
-- **cloudflared-token** in `cloudflared` namespace (from `CLOUDFLARE_TUNNEL_TOKEN` env var or Pulumi config)
-- **argocd-repo-github-app** in `argocd` namespace (org-level `repo-creds` credential template for GitHub App)
-- **argocd-ghcr-oci** in `argocd` namespace (optional — only needed if OCI Helm charts in GHCR are private)
-
-Required env vars:
-- `GITHUB_APP_ID` — numeric App ID
-- `GITHUB_APP_INSTALLATION_ID` — numeric Installation ID
-- `GITHUB_APP_PRIVATE_KEY_FILE` — path to the `.pem` file (defaults to `.talos/github-app-private-key.pem`)
-
-Optional env vars (only for private GHCR charts):
-- `GHCR_USERNAME` — GitHub username
-- `GHCR_TOKEN` — PAT with `read:packages` scope
-
-## 5. Install ArgoCD
-
-```bash
-./scripts/bootstrap-install-argocd.sh
-```
-
-Installs ArgoCD via Helm and applies the root App of Apps. ArgoCD then syncs all workloads (EBS CSI, Metrics Server, Traefik, StorageClass, cloudflared, test-app).
-
-## 6. Verify
+## 4. Verify
 
 ```bash
 export TALOSCONFIG=$(pwd)/.talos/talosconfig
@@ -89,13 +75,18 @@ talosctl version
 
 # Full cluster health (etcd + k8s + nodes)
 talosctl health
+
+# ArgoCD admin password (also available as a Pulumi stack output)
+pulumi stack output argocdAdminPassword --show-secrets
+# Or via kubectl:
+# kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d
 ```
 
-## 7. Post-Setup
+## 5. Post-Setup
 
-### Back up secrets.yaml
+### Back up Pulumi state
 
-`secrets/secrets.yaml` is the root of all cluster PKI. If lost, the cluster is **unrecoverable**. Copy it somewhere safe (password manager, encrypted cloud storage) immediately.
+Talos PKI is stored in Pulumi state. Losing the state = unrecoverable cluster. Ensure your Pulumi state backend is backed up.
 
 ### Take an initial etcd snapshot
 
@@ -105,22 +96,37 @@ talosctl health
 
 ### Configure Cloudflare Tunnel
 
-If not already configured, set the `cloudflareTunnelToken` in Pulumi config:
+If not already configured, add DNS CNAME records for your Cloudflare Tunnel:
 
-```bash
-pulumi config set --secret cloudflareTunnelToken <token>
-npm run up
-```
+- `argocd.faulty.technology CNAME <tunnel-id>.cfargotunnel.com` (proxied)
+- `test-talos.faulty.technology CNAME <tunnel-id>.cfargotunnel.com` (proxied)
 
-## 8. Teardown
+## 6. Teardown
 
-To destroy all AWS resources:
+To destroy all resources:
 
 ```bash
 source .env.local
 npm run destroy
 ```
 
-This removes: EC2 instance, EIP, VPC, subnet, security group, IAM role, S3 bucket. EBS data volumes with `Retain` policy may persist and need manual cleanup.
+This:
 
-Local files (`.talos/`, `secrets/`) are not deleted — keep them if you plan to recreate the cluster with the same PKI.
+- Terminates the EC2 instance (no graceful Talos reset — unnecessary for full teardown)
+- Removes all AWS resources (VPC, subnet, SG, IAM, EIP, S3)
+- EBS data volumes with `Retain` policy may persist and need manual cleanup
+
+Local files (`.talos/`) are not deleted by Pulumi destroy.
+
+## 7. Full Rebuild
+
+To burn down and rebuild from scratch:
+
+```bash
+source .env.local
+./scripts/ops-etcd-backup.sh --save-to-s3   # Back up first
+npm run destroy                               # Tear down
+npm run up                                    # Rebuild
+```
+
+ArgoCD will re-sync all workloads automatically. Application data on retained EBS volumes may need to be re-attached manually.
