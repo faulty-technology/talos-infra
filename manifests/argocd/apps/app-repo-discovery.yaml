@@ -18,6 +18,8 @@ spec:
             branch: main
           - repo: subnet-cheat-sheet
             branch: main
+          - repo: belowthefold-rocks
+            branch: main
   template:
     metadata:
       name: "{{.repo}}"
