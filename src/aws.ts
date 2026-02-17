@@ -245,6 +245,27 @@ new aws.iam.RolePolicy("etcd-backup-policy", {
 	}`,
 });
 
+// IAM policy: allow Fluent Bit to ship logs to CloudWatch
+new aws.iam.RolePolicy("cloudwatch-logs-policy", {
+	role: instanceRole.id,
+	policy: JSON.stringify({
+		Version: "2012-10-17",
+		Statement: [
+			{
+				Effect: "Allow",
+				Action: [
+					"logs:CreateLogGroup",
+					"logs:CreateLogStream",
+					"logs:PutLogEvents",
+					"logs:DescribeLogGroups",
+					"logs:DescribeLogStreams",
+				],
+				Resource: "arn:aws:logs:us-east-1:*:log-group:/talos-homelab/*",
+			},
+		],
+	}),
+});
+
 // ---------------------------------------------------------------------------
 // Exported values for downstream modules
 // ---------------------------------------------------------------------------

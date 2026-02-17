@@ -1,29 +1,28 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: loki
+  name: fluent-bit
   namespace: argocd
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   sources:
-    - repoURL: https://grafana.github.io/helm-charts
-      chart: loki
+    - repoURL: https://fluent.github.io/helm-charts
+      chart: fluent-bit
       targetRevision: "*"
       helm:
         valueFiles:
-          - $values/manifests/loki-values.yaml
+          - $values/manifests/fluent-bit-values.yaml
     - repoURL: https://github.com/faulty-technology/talos-infra.git
       targetRevision: main
       ref: values
   destination:
     server: https://kubernetes.default.svc
-    namespace: monitoring
+    namespace: logging
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
-      - Replace=true
