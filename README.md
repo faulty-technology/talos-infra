@@ -44,52 +44,24 @@ kubectl get pods -A
 - VPC with 1 public subnet (us-east-1a)
 - Internet gateway + route table
 - Security group (ports 6443 + 50000 inbound, restricted to configured CIDR; all outbound)
-- IAM role with EBS CSI permissions
+- IAM role with EBS CSI + CloudWatch Logs permissions
+- S3 bucket for etcd backups (versioned, encrypted, 30-day lifecycle)
 - t3a.medium EC2 instance running Talos Linux
 - Elastic IP (stable address across restarts)
 
 ### Kubernetes Components (via ArgoCD App of Apps)
 
 - **ArgoCD** — GitOps controller, manages all apps below
+- **argocd-ingress** — Traefik IngressRoute for ArgoCD UI
 - **EBS CSI driver** — gp3 StorageClass (default, encrypted)
+- **Fluent Bit** — log shipping to CloudWatch
 - **Metrics Server** — enables `kubectl top`
 - **Traefik** — ingress controller (ClusterIP, no LB needed)
 - **cloudflared** — Cloudflare Tunnel connector
 - **StorageClass** — gp3 encrypted default
 - **test-app** — sample deployment for validation
+- **project-apps** — AppProject constraining app workloads
 - **app-repo-discovery** — ApplicationSet that auto-generates Applications from a list of external repos (each repo provides its own config in `.argocd/`)
-
-## Directory Structure
-
-```
-├── index.ts                 # Pulumi entry point
-├── src/
-│   ├── aws.ts               # AWS resources (VPC, SG, IAM, EIP, EC2, S3)
-│   ├── talos.ts             # Talos: secrets, config, apply, bootstrap, kubeconfig
-│   ├── kubernetes.ts        # K8s: secrets, ArgoCD Helm release, root app
-│   └── files.ts             # Write talosconfig + kubeconfig to .talos/
-├── Pulumi.yaml              # Project definition
-├── Pulumi.dev.yaml          # Stack config (region, instance type, etc.)
-├── scripts/
-│   ├── bootstrap-prerequisites.sh   # Install tools
-│   ├── ops-etcd-backup.sh           # etcd snapshot + S3 upload
-│   ├── ops-etcd-restore.sh          # etcd restore from snapshot
-│   └── utils.sh                     # Shared logging helpers
-├── manifests/
-│   ├── argocd/
-│   │   ├── root-app.yaml            # Root Application (App of Apps)
-│   │   ├── argocd-values.yaml       # ArgoCD Helm values
-│   │   ├── argocd-ingress.yaml      # ArgoCD ingress via Cloudflare Tunnel
-│   │   └── apps/                    # Individual ArgoCD Application manifests
-│   ├── storageclass-gp3.yaml
-│   ├── traefik-values.yaml
-│   ├── cloudflared.yaml
-│   └── test-app.yaml
-├── playbooks/
-│   ├── fresh-setup.md               # End-to-end cluster setup guide
-│   └── etcd-disaster-recovery.md    # Snapshot + restore procedures
-└── .talos/                  # Talos configs + kubeconfig (gitignored, back up!)
-```
 
 ## Day 2 Operations
 
