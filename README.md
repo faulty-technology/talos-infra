@@ -149,3 +149,135 @@ pulumi destroy
 
 Note: Elastic IPs are free when attached to a running instance.
 Stopped instances with attached EIPs cost ~$0.005/hr ($3.60/mo).
+
+## Architecture Diagrams
+
+### System Overview
+
+High-level view of the running system — what talks to what.
+
+```mermaid
+graph TB
+    subgraph Internet
+        Public([Public Users])
+        Admin([Operator])
+        GH[GitHub<br/>faulty-technology/*]
+    end
+
+    subgraph "Cloudflare"
+        CFEdge[Cloudflare Edge]
+        CFAccess[Access Policies<br/>Zero Trust]
+    end
+
+    subgraph "AWS — us-east-1a"
+        EIP[Elastic IP]
+
+        subgraph "VPC 10.0.0.0/16"
+            subgraph "EC2 — Talos Linux (t3a.medium)"
+                subgraph "Kubernetes (single node)"
+                    ArgoCD[ArgoCD]
+                    Traefik[Traefik<br/>Ingress Controller]
+                    Cloudflared[cloudflared<br/>Tunnel Connector]
+                    FluentBit[Fluent Bit]
+                    EBSCSI[EBS CSI Driver]
+                    Apps[App Workloads]
+                end
+            end
+        end
+
+        S3[(S3<br/>etcd backups)]
+        CW[(CloudWatch<br/>Logs)]
+        EBS[(EBS gp3<br/>Volumes)]
+    end
+
+    Public -- HTTPS --> CFEdge
+    Admin -- HTTPS --> CFEdge
+    CFEdge --> CFAccess
+    CFAccess -- "public routes" --> Cloudflared
+    CFAccess -. "protected routes<br/>(e.g. ArgoCD UI)" .-> Cloudflared
+    Cloudflared -. "outbound tunnel<br/>(no inbound ports)" .-> CFEdge
+    Cloudflared --> Traefik
+    Traefik --> Apps
+    Admin -- "kubectl :6443<br/>talosctl :50000" --> EIP
+    EIP --> Kubernetes
+    ArgoCD -- "sync from Git" --> GH
+    FluentBit --> CW
+    Apps -. PVCs .-> EBSCSI --> EBS
+    Kubernetes -. "etcd snapshots" .-> S3
+```
+
+### Pulumi Deployment Pipeline
+
+What `pulumi up` does — the sequential steps from zero to running cluster.
+
+```mermaid
+flowchart LR
+    subgraph "1 — AWS"
+        VPC[VPC + Subnet<br/>+ IGW + SG]
+        IAM[IAM Role<br/>+ Policies]
+        EC2[EC2 Instance<br/>+ EIP]
+        S3B[S3 Bucket]
+    end
+
+    subgraph "2 — Talos"
+        Secrets[Generate PKI<br/>Secrets]
+        Config[Derive Machine<br/>Config]
+        Apply[Apply Config<br/>to Node]
+        Boot[Bootstrap<br/>etcd]
+        Health[Wait for<br/>Cluster Health]
+        Kube[Retrieve<br/>Kubeconfig]
+    end
+
+    subgraph "3 — Kubernetes"
+        NS[Create<br/>Namespaces]
+        K8Sec[Create Secrets<br/>cloudflared + GitHub App]
+        Helm[Install ArgoCD<br/>via Helm]
+        Root[Apply Root<br/>App of Apps]
+    end
+
+    subgraph "4 — Files"
+        TC[Write<br/>talosconfig]
+        KC[Write<br/>kubeconfig]
+    end
+
+    VPC --> EC2
+    IAM --> EC2
+    EC2 --> Secrets
+    Secrets --> Config --> Apply --> Boot --> Health --> Kube
+    Kube --> NS --> K8Sec --> Helm --> Root
+    Kube --> TC
+    Kube --> KC
+```
+
+### ArgoCD GitOps Flow
+
+How ArgoCD manages cluster workloads after initial deployment.
+
+```mermaid
+flowchart TB
+    subgraph "talos-infra repo"
+        RootApp["root Application<br/>(manifests/argocd/apps/)"]
+        AppDefs["Application manifests<br/>ebs-csi, traefik, cloudflared,<br/>fluent-bit, metrics-server,<br/>storageclass, test-app, ..."]
+        AppSet["ApplicationSet<br/>app-repo-discovery"]
+    end
+
+    subgraph "App repos (faulty-technology/*)"
+        Repo1["hello-k8s/.argocd/"]
+        Repo2["subnet-cheat-sheet/.argocd/"]
+        Repo3["belowthefold-rocks/.argocd/"]
+    end
+
+    subgraph "Kubernetes Cluster"
+        ArgoCD[ArgoCD]
+        InfraApps["Infrastructure Apps<br/>(Traefik, EBS CSI, Fluent Bit, ...)"]
+        UserApps["App Workloads<br/>(hello-k8s, subnet-cheat-sheet, ...)"]
+    end
+
+    Pulumi["pulumi up"] -- "installs ArgoCD +<br/>applies root app" --> ArgoCD
+    ArgoCD -- "syncs" --> RootApp
+    RootApp -- "contains" --> AppDefs
+    RootApp -- "contains" --> AppSet
+    AppDefs -- "synced by ArgoCD" --> InfraApps
+    AppSet -- "generates Applications<br/>from list" --> Repo1 & Repo2 & Repo3
+    Repo1 & Repo2 & Repo3 -- "synced by ArgoCD" --> UserApps
+```
