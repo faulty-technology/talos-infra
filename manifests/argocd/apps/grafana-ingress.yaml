@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: grafana-ingress
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/faulty-technology/talos-infra.git
+    targetRevision: main
+    path: manifests
+    directory:
+      include: "grafana-ingress.yaml"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
