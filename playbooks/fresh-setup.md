@@ -17,6 +17,7 @@ Ensure you have:
 - AWS credentials configured (`aws sts get-caller-identity` should work)
 - `.env.local` with `PULUMI_CONFIG_PASSPHRASE` set
 - Node.js + npm installed
+- A GitHub App configured with the required permissions (see [GitHub App Setup](github-app-setup.md))
 
 ## 2. Configure Pulumi Secrets
 
