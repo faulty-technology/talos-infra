@@ -97,6 +97,23 @@ const argocd = new k8s.helm.v3.Release(
 		valueYamlFiles: [
 			new pulumi.asset.FileAsset("manifests/argocd/argocd-values.yaml"),
 		],
+		// Dynamic values merged on top of the static values file.
+		// Injects GitHub App credentials for the notifications controller.
+		values:
+			githubAppId && githubAppInstallationId && githubAppPrivateKey
+				? {
+						notifications: {
+							secret: {
+								items: {
+									"github-privateKey": githubAppPrivateKey,
+								},
+							},
+							notifiers: {
+								"service.github": pulumi.interpolate`appID: ${githubAppId}\ninstallationID: ${githubAppInstallationId}\nprivateKey: $github-privateKey\n`,
+							},
+						},
+					}
+				: {},
 		timeout: 300,
 		waitForJobs: true,
 	},
