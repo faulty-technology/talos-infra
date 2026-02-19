@@ -61,7 +61,82 @@ dex:
   enabled: false
 
 notifications:
-  enabled: false
+  enabled: true
+  argocdUrl: https://argocd.faulty.technology
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      memory: 128Mi
+
+  # GitHub App service — appID and installationID are injected via Pulumi Helm values.
+  # privateKey references $github-privateKey from argocd-notifications-secret.
+  # notifiers: {} is overridden by Pulumi values merge
+
+  templates:
+    template.app-deploy-started: |
+      message: |
+        Deployment of {{.app.metadata.name}} started.
+      github:
+        repoURLPath: "{{.app.spec.source.repoURL}}"
+        revisionPath: "{{.app.status.operationState.syncResult.revision}}"
+        deployment:
+          state: in_progress
+          environment: production
+          logURL: "{{.context.argocdUrl}}/applications/{{.app.metadata.name}}"
+          autoMerge: false
+          transientEnvironment: false
+    template.app-deploy-succeeded: |
+      message: |
+        Application {{.app.metadata.name}} is running new version.
+      github:
+        repoURLPath: "{{.app.spec.source.repoURL}}"
+        revisionPath: "{{.app.status.operationState.syncResult.revision}}"
+        deployment:
+          state: success
+          environment: production
+          logURL: "{{.context.argocdUrl}}/applications/{{.app.metadata.name}}"
+          autoMerge: false
+          transientEnvironment: false
+    template.app-deploy-failed: |
+      message: |
+        Deployment of {{.app.metadata.name}} failed.
+      github:
+        repoURLPath: "{{.app.spec.source.repoURL}}"
+        revisionPath: "{{.app.status.operationState.syncResult.revision}}"
+        deployment:
+          state: failure
+          environment: production
+          logURL: "{{.context.argocdUrl}}/applications/{{.app.metadata.name}}"
+          autoMerge: false
+          transientEnvironment: false
+
+  triggers:
+    trigger.on-deployed: |
+      - description: Application is synced and healthy. Triggered once per commit.
+        oncePer: app.status.sync.revision
+        send:
+          - app-deploy-succeeded
+        when: app.status.operationState.phase in ['Succeeded'] and app.status.health.status == 'Healthy'
+    trigger.on-sync-running: |
+      - description: Application sync has started.
+        oncePer: app.status.sync.revision
+        send:
+          - app-deploy-started
+        when: app.status.operationState.phase in ['Running']
+    trigger.on-sync-failed: |
+      - description: Application sync has failed.
+        oncePer: app.status.sync.revision
+        send:
+          - app-deploy-failed
+        when: app.status.operationState.phase in ['Error', 'Failed']
+    trigger.on-health-degraded: |
+      - description: Application health has degraded.
+        oncePer: app.status.sync.revision
+        send:
+          - app-deploy-failed
+        when: app.status.health.status == 'Degraded'
 
 applicationSet:
   replicas: 1
