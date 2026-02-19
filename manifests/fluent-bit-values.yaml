@@ -9,6 +9,10 @@ daemonSetVolumes:
     hostPath:
       path: /etc/machine-id
       type: File
+  - name: flb-db
+    hostPath:
+      path: /var/lib/fluent-bit
+      type: DirectoryOrCreate
 
 daemonSetVolumeMounts:
   - name: varlog
@@ -20,6 +24,8 @@ daemonSetVolumeMounts:
   - name: etcmachineid
     mountPath: /etc/machine-id
     readOnly: true
+  - name: flb-db
+    mountPath: /var/lib/fluent-bit
 
 resources:
   requests:
@@ -48,7 +54,7 @@ config:
         Tag               kube.*
         Path              /var/log/containers/*.log
         Parser            cri
-        DB                /var/log/flb_kube.db
+        DB                /var/lib/fluent-bit/flb_kube.db
         Mem_Buf_Limit     5MB
         Skip_Long_Lines   On
         Refresh_Interval  10
