@@ -11,27 +11,21 @@ newrelic-infrastructure:
   # Actual usage on a small homelab cluster is well below these values.
   controlPlane:
     resources:
-      agent:
-        requests:
-          cpu: 25m
-          memory: 50Mi
-        limits:
-          memory: 100Mi
-      forwarder:
-        requests:
-          cpu: 25m
-          memory: 50Mi
-        limits:
-          memory: 100Mi
+      requests:
+        cpu: 25m
+        memory: 100Mi
+      limits:
+        memory: 150Mi
   ksm:
-    resources:
-      ksm:
+    ksm:
+      resources:
         requests:
           cpu: 25m
           memory: 50Mi
         limits:
           memory: 100Mi
-      forwarder:
+    forwarder:
+      resources:
         requests:
           cpu: 25m
           memory: 50Mi
