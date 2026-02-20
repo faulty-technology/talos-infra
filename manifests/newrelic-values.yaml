@@ -7,6 +7,36 @@ global:
 newrelic-infrastructure:
   enabled: true
   privileged: true # required for node-level metrics; namespace is privileged PSS
+  # Default requests are too high for a t3a.medium (94% memory requests at baseline).
+  # Actual usage on a small homelab cluster is well below these values.
+  controlPlane:
+    resources:
+      agent:
+        requests:
+          cpu: 25m
+          memory: 50Mi
+        limits:
+          memory: 100Mi
+      forwarder:
+        requests:
+          cpu: 25m
+          memory: 50Mi
+        limits:
+          memory: 100Mi
+  ksm:
+    resources:
+      ksm:
+        requests:
+          cpu: 25m
+          memory: 50Mi
+        limits:
+          memory: 100Mi
+      forwarder:
+        requests:
+          cpu: 25m
+          memory: 50Mi
+        limits:
+          memory: 100Mi
 
 nri-kube-events:
   enabled: true
