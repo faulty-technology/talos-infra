@@ -28,6 +28,8 @@ No organization or account permissions are needed.
 2. Install it on the `faulty-technology` organization
 3. Choose either **All repositories** or select specific repos that ArgoCD manages
 
+> **Note:** If you later add new permissions to an existing app, the org installation enters a pending state and the new permissions won't be active until an org owner approves the update. Check **GitHub → faulty-technology org → Settings → GitHub Apps** for a pending approval banner. Deployments silently fail with no error in ArgoCD logs until this is accepted.
+
 ## 4. Generate a Private Key
 
 1. Go to the app's settings page → **General** → **Private keys**
