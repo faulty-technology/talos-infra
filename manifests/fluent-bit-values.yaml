@@ -37,6 +37,10 @@ resources:
 tolerations:
   - operator: Exists
 
+envFrom:
+  - secretRef:
+      name: newrelic-license-key
+
 config:
   service: |
     [SERVICE]
@@ -74,10 +78,15 @@ config:
 
   outputs: |
     [OUTPUT]
-        Name                cloudwatch_logs
-        Match               kube.*
-        region              us-east-1
-        log_group_name      /talos-homelab/containers
-        log_stream_prefix   fluentbit-
-        auto_create_group   true
-        log_retention_days  7
+        Name              http
+        Match             kube.*
+        Host              log-api.newrelic.com
+        Port              443
+        URI               /log/v1
+        Format            json_lines
+        json_date_key     timestamp
+        json_date_format  iso8601
+        TLS               On
+        TLS.Verify        On
+        Header            X-License-Key ${licenseKey}
+        compress          gzip

@@ -1,0 +1,27 @@
+global:
+  cluster: talos-homelab
+  customSecretName: newrelic-license-key # K8s secret created by Pulumi
+  customSecretLicenseKey: licenseKey # key within that secret
+  lowDataMode: true # reduces cardinality; ~40-60% less infra metric volume
+
+newrelic-infrastructure:
+  enabled: true
+  privileged: true # required for node-level metrics; namespace is privileged PSS
+
+nri-kube-events:
+  enabled: true
+
+nri-metadata-injection:
+  enabled: true # enriches spans with k8s metadata when APM agents are added later
+
+kube-state-metrics:
+  enabled: true
+
+newrelic-prometheus-agent:
+  enabled: false # no in-cluster Prometheus to scrape
+
+newrelic-logging:
+  enabled: false # using existing Fluent Bit DaemonSet instead
+
+nri-prometheus:
+  enabled: false

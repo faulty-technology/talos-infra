@@ -10,6 +10,7 @@ const cloudflareTunnelToken = config.getSecret("cloudflareTunnelToken");
 const githubAppId = config.getSecret("githubAppId");
 const githubAppInstallationId = config.getSecret("githubAppInstallationId");
 const githubAppPrivateKey = config.getSecret("githubAppPrivateKey");
+const newRelicLicenseKey = config.getSecret("newRelicLicenseKey");
 
 // ---------------------------------------------------------------------------
 // Kubernetes Provider (initialized from Talos-generated kubeconfig)
@@ -79,6 +80,55 @@ if (githubAppId && githubAppInstallationId && githubAppPrivateKey) {
 			},
 		},
 		{ provider: k8sProvider, dependsOn: [argocdNs] },
+	);
+}
+
+// ---------------------------------------------------------------------------
+// New Relic — namespace + license key secret
+// nri-infrastructure DaemonSet requires privileged PSS.
+// Two secrets needed: namespace-scoped, so one per consumer (nri-bundle + Fluent Bit).
+// ---------------------------------------------------------------------------
+const newrelicNs = new k8s.core.v1.Namespace(
+	"newrelic-ns",
+	{
+		metadata: {
+			name: "newrelic",
+			labels: { "pod-security.kubernetes.io/enforce": "privileged" },
+		},
+	},
+	{ provider: k8sProvider },
+);
+
+// Logging namespace created here so the NR secret exists before Fluent Bit starts.
+// ArgoCD's Fluent Bit app (managedNamespaceMetadata) will see the existing namespace.
+const loggingNs = new k8s.core.v1.Namespace(
+	"logging-ns",
+	{
+		metadata: {
+			name: "logging",
+			labels: { "pod-security.kubernetes.io/enforce": "privileged" },
+		},
+	},
+	{ provider: k8sProvider },
+);
+
+if (newRelicLicenseKey) {
+	new k8s.core.v1.Secret(
+		"newrelic-license-key",
+		{
+			metadata: { name: "newrelic-license-key", namespace: "newrelic" },
+			stringData: { licenseKey: newRelicLicenseKey },
+		},
+		{ provider: k8sProvider, dependsOn: [newrelicNs] },
+	);
+
+	new k8s.core.v1.Secret(
+		"newrelic-license-key-logging",
+		{
+			metadata: { name: "newrelic-license-key", namespace: "logging" },
+			stringData: { licenseKey: newRelicLicenseKey },
+		},
+		{ provider: k8sProvider, dependsOn: [loggingNs] },
 	);
 }
 
